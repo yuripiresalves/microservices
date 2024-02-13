@@ -43,6 +43,18 @@ services:
     networks:
       - app-net
 
+  mysql:
+    container_name: micro_mysql
+    image: "mysql:latest"
+    ports:
+      - "3306:3306"
+    volumes:
+      - "mysql_data:/var/lib/mysql"
+    environment:
+      - MYSQL_ROOT_PASSWORD=docker
+    networks:
+      - app-net
+
 networks:
   app-net:
     driver: bridge
@@ -53,4 +65,6 @@ volumes:
   kafka_data:
     driver: local
   postgresql_data:
+    driver: local
+  mysql_data:
     driver: local

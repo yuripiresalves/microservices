@@ -24,11 +24,11 @@ const producer = kafka.producer({
 });
 
 producer.connect().then(() => {
-  console.log("[Purchases] Kafka producer connected");
+  console.log("[PURCHASES] Kafka producer connected");
 });
 
 export const sendMessage = async (topic: string, message: any) => {
-  console.log(`[Purchases] New message on topic "${topic}"`);
+  console.log(`[PURCHASES] New message on topic "${topic}"`);
   console.log(JSON.stringify(message, null, 2));
 
   await producer.send({

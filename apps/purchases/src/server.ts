@@ -1,7 +1,10 @@
+import "dotenv/config";
+
 import express from "express";
 import axios from "axios";
 import cors from "cors";
 import { prisma } from "./prisma";
+import { sendMessage } from "./kafka";
 
 const app = express();
 app.use(express.json());
@@ -29,7 +32,7 @@ app.post("/purchases", async (req, res) => {
   const data = await req.body;
   const { productId, name, email } = data;
 
-  const product = await prisma.product.findById({
+  const product = await prisma.product.findUnique({
     where: {
       id: productId,
     },
@@ -40,18 +43,41 @@ app.post("/purchases", async (req, res) => {
   }
 
   try {
-    await axios.post("http://localhost:3001/access", {
-      ...data,
+    const customer = await prisma.customer.create({
+      data: {
+        id: crypto.randomUUID(),
+        name,
+        email,
+      },
     });
 
-    console.log("[PURCHASE]", data);
-    return res.status(201).json({ message: "Purchase created" });
+    const purchase = await prisma.purchase.create({
+      data: {
+        id: crypto.randomUUID(),
+        customerId: customer.id,
+        productId,
+      },
+    });
+
+    await sendMessage("purchases.new-purchase", {
+      product: {
+        id: product.id,
+        title: product.title,
+      },
+      customer: {
+        name: customer.name,
+        email: customer.email,
+      },
+      purchaseId: purchase.id,
+    });
+
+    return res.status(201).send();
   } catch (error) {
-    console.log("[PURCHASE]", error.response.data);
-    return res.status(409).json(error.response.data);
+    console.log("[PURCHASES]", error.response.data);
+    return res.status(400).json(error.response.data);
   }
 });
 
 app.listen(3000, () => {
-  console.log("[PURCHASE] Server is listening on port 3000");
+  console.log("[PURCHASES] Server is listening on port 3000");
 });
