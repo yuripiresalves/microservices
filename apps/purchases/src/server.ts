@@ -1,7 +1,6 @@
 import "dotenv/config";
 
 import express from "express";
-import axios from "axios";
 import cors from "cors";
 import { prisma } from "./prisma";
 import { sendMessage } from "./kafka";
@@ -9,24 +8,6 @@ import { sendMessage } from "./kafka";
 const app = express();
 app.use(express.json());
 app.use(cors());
-
-const products = [
-  {
-    id: 1,
-    name: "Product 1",
-    price: 100,
-  },
-  {
-    id: 2,
-    name: "Product 2",
-    price: 200,
-  },
-  {
-    id: 3,
-    name: "Product 3",
-    price: 300,
-  },
-];
 
 app.post("/purchases", async (req, res) => {
   const data = await req.body;
@@ -43,13 +24,21 @@ app.post("/purchases", async (req, res) => {
   }
 
   try {
-    const customer = await prisma.customer.create({
-      data: {
-        id: crypto.randomUUID(),
-        name,
+    let customer = await prisma.customer.findUnique({
+      where: {
         email,
       },
     });
+
+    if (!customer) {
+      customer = await prisma.customer.create({
+        data: {
+          id: crypto.randomUUID(),
+          name,
+          email,
+        },
+      });
+    }
 
     const purchase = await prisma.purchase.create({
       data: {
@@ -67,6 +56,7 @@ app.post("/purchases", async (req, res) => {
       customer: {
         name: customer.name,
         email: customer.email,
+        id: customer.id,
       },
       purchaseId: purchase.id,
     });

@@ -1,61 +1,100 @@
 import "dotenv/config";
 
 import express from "express";
+import { prisma } from "./prisma";
+import { kafka } from "./kafka";
 
 const app = express();
 app.use(express.json());
 
-const accesses = [
-  {
-    productId: 1,
-    productName: "Product 1",
-    userEmail: "yuri@gmail.com",
-    userName: "User 1",
-    hasAccess: true,
-  },
-  {
-    productId: 2,
-    productName: "Product 2",
-    userEmail: "user@gmail.com",
-    userName: "User 2",
-    hasAccess: true,
-  },
-  {
-    productId: 2,
-    productName: "Product 2",
-    userEmail: "a@gmail.com",
-    userName: "User 3",
-    hasAccess: true,
-  },
-];
+interface PurchasesNewPurchaseMessage {
+  product: {
+    id: string;
+    title: string;
+  };
+  customer: {
+    name: string;
+    email: string;
+    id: string;
+  };
+  purchaseId: string;
+}
 
-app.post("/access", async (req, res) => {
-  const { name, email, productId } = await req.body;
+async function main() {
+  const consumer = kafka.consumer({
+    groupId: "access-group",
+    allowAutoTopicCreation: true,
+  });
 
-  const access = accesses.find(
-    (access) => access.userEmail === email && access.productId === productId
-  );
+  await consumer.connect();
+  await consumer.subscribe({ topic: "purchases.new-purchase" });
 
-  if (!access) {
-    accesses.push({
-      productId,
-      productName: `Product ${productId}`,
-      userEmail: email,
-      userName: name,
-      hasAccess: true,
-    });
+  await consumer.run({
+    eachMessage: async ({ message }) => {
+      const purchaseJSON = message.value?.toString();
 
-    console.log(`[ACCESS] ${name} comprou o produto ${productId}`);
-    console.log("Tabela de acessos atualizada:");
-    console.table(accesses);
+      if (!purchaseJSON) {
+        return;
+      }
 
-    return res.status(201).json({ message: "Access allowed" });
-  }
+      const purchase: PurchasesNewPurchaseMessage = JSON.parse(purchaseJSON);
 
-  console.log(`[ACCESS] ${name} já possui acesso ao produto ${productId}`);
-  return res.status(409).json({ message: "Access already allowed" });
-});
+      let product = await prisma.product.findUnique({
+        where: { id: purchase.product.id },
+      });
 
-app.listen(3001, () => {
-  console.log("[ACCESS] Server is listening on port 3001");
+      if (!product) {
+        product = await prisma.product.create({
+          data: {
+            id: purchase.product.id,
+            title: purchase.product.title,
+          },
+        });
+      }
+
+      let customer = await prisma.customer.findUnique({
+        where: { email: purchase.customer.email },
+      });
+
+      if (!customer) {
+        customer = await prisma.customer.create({
+          data: {
+            id: purchase.customer.id,
+            name: purchase.customer.name,
+            email: purchase.customer.email,
+          },
+        });
+      }
+
+      const costumerHasAccess = await prisma.access.findFirst({
+        where: {
+          customerId: customer?.id,
+          productId: purchase.product.id,
+        },
+      });
+
+      if (costumerHasAccess) {
+        console.log(
+          `[ACCESS] User ${purchase.customer.name} already has access to ${purchase.product.title}`
+        );
+        return;
+      }
+
+      await prisma.access.create({
+        data: {
+          id: crypto.randomUUID(),
+          customerId: customer?.id,
+          productId: purchase.product.id,
+        },
+      });
+
+      console.log(
+        `[ACCESS] Access allowed to user ${purchase.customer.name} to ${purchase.product.title}`
+      );
+    },
+  });
+}
+
+main().then(() => {
+  console.log("[ACCESS] Listening to Kafka messages");
 });
