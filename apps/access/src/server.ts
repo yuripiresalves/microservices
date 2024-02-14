@@ -85,6 +85,7 @@ async function main() {
           id: crypto.randomUUID(),
           customerId: customer?.id,
           productId: purchase.product.id,
+          purchaseId: purchase.purchaseId,
         },
       });
 

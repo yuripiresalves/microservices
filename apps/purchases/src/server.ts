@@ -40,6 +40,19 @@ app.post("/purchases", async (req, res) => {
       });
     }
 
+    const userHasAlreadyPurcheasedProduct = await prisma.purchase.findFirst({
+      where: {
+        productId,
+        customerId: customer.id,
+      },
+    });
+
+    if (userHasAlreadyPurcheasedProduct) {
+      return res
+        .status(400)
+        .json({ message: "User has already purchased this product" });
+    }
+
     const purchase = await prisma.purchase.create({
       data: {
         id: crypto.randomUUID(),
@@ -63,8 +76,8 @@ app.post("/purchases", async (req, res) => {
 
     return res.status(201).send();
   } catch (error) {
-    console.log("[PURCHASES]", error.response.data);
-    return res.status(400).json(error.response.data);
+    console.log("[PURCHASES]", error);
+    return res.status(400).json(error);
   }
 });
 
